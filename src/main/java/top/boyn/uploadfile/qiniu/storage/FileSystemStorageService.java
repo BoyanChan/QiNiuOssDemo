@@ -1,11 +1,13 @@
 package top.boyn.uploadfile.qiniu.storage;
 
-import com.qiniu.api.auth.digest.Mac;
-import com.qiniu.api.config.Config;
-import com.qiniu.api.io.IoApi;
-import com.qiniu.api.io.PutExtra;
-import com.qiniu.api.io.PutRet;
-import com.qiniu.api.rs.PutPolicy;
+import com.google.gson.Gson;
+import com.qiniu.common.QiniuException;
+import com.qiniu.common.Zone;
+import com.qiniu.http.Response;
+import com.qiniu.storage.Configuration;
+import com.qiniu.storage.UploadManager;
+import com.qiniu.storage.model.DefaultPutRet;
+import com.qiniu.util.Auth;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,34 +15,73 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.io.InputStream;
 
 @Service
 public class FileSystemStorageService implements StorageService{
 
     private static final Logger logger = LoggerFactory.getLogger(FileSystemStorageService.class);
-    private static String AccessKey;
-    private static String SecretKey;
-    private static String bucketName;
-    private static Mac mac;
-    private static PutPolicy putPolicy;
-    private static String token;
-    private static String prefix;
-    private static PutExtra extra = new PutExtra();
+    private static String AccessKey;//官网上的访问秘钥
+    private static String SecretKey;//官网上的秘钥
+    private static String bucketName;//对象存储空间名字
+    private static Auth auth;//认证对象
+    private static String prefix;//前缀
+    private static Configuration cfg;
+    private static UploadManager uploadManager;
+    private static String token;//token是动态变化的,所以每次上传都需要请求一次
+
 
     @Override
-    public void init() throws Exception{
+    public void init(){
+
+        cfg = new Configuration(Zone.zone0());
+        uploadManager = new UploadManager(cfg);
+
+        /* 6.* version
         Config.ACCESS_KEY=AccessKey;
         Config.SECRET_KEY=SecretKey;
         mac = new Mac(Config.ACCESS_KEY, Config.SECRET_KEY);
         putPolicy = new PutPolicy(bucketName);
-        token = putPolicy.token(mac);
+        token = putPolicy.token(mac);*/
     }
 
     @Override
-    public void store(MultipartFile file) {
+    public boolean store(MultipartFile file) {
+        auth = Auth.create(AccessKey,SecretKey);
+        token = auth.uploadToken(bucketName);
         String fileName = StringUtils.cleanPath(file.getOriginalFilename());//将文件名中的路径去除
+        try{
+            if(file.isEmpty()){
+                throw new StorageException("Failed to store empty file "+fileName);
+            }
+            if(fileName.contains("..")){
+                throw new StorageException("Cannot store file with relative path outside current directory "+fileName);
+            }
+            try(InputStream inputStream = file.getInputStream()){
+                Response response = uploadManager.put(inputStream,fileName,token,null,null);
+                DefaultPutRet putRet = new Gson().fromJson(response.bodyString(), DefaultPutRet.class);
+                logger.info(putRet.key);//显示上传的文件名
+                return true;
+            }
+        }
+        catch (QiniuException ex){
+            System.out.println(ex.error());
+            System.out.println(ex.code());
+            Response r = ex.response;
+            if(r!=null) {
+                System.out.println(r);
+                try {
+                    System.out.println(r.bodyString());
+                } catch (QiniuException ex2) {
+                    //ignore
+                }
+            }
+        } catch (Exception e){
+            logger.info("Fail");
+            throw new StorageException("Failed to store file "+fileName,e);
+        }
+        return false;
+        /*  6.* version
         try{
             if(file.isEmpty()){
                 throw new StorageException("Failed to store empty file "+fileName);
@@ -59,16 +100,25 @@ public class FileSystemStorageService implements StorageService{
         }
         catch (IOException e){
             throw new StorageException("Failed to store file "+fileName,e);
-        }
+        }*/
+
+    }
+
+    @Override
+    public String getToken() {
+        auth = Auth.create(AccessKey,SecretKey);
+        token = auth.uploadToken(bucketName);
+        return token;
     }
 
     @Value("${qiniu.prefix}")
-    public static void setPrefix(String Prefix) {
+    public void setPrefix(String Prefix) {
         prefix = Prefix;
+
     }
 
     @Value("${qiniu.bucket-name}")
-    public static void setBucketName(String bucketname){
+    public void setBucketName(String bucketname){
         bucketName = bucketname;
     }
 

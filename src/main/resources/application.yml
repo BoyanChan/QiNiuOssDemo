@@ -2,13 +2,13 @@ spring:
   servlet:
     multipart:
      max-file-size: 10MB
-     max-request-size: 10MB  #设置最大大小为10MB
+     max-request-size: 10MB
 
 qiniu:
-  ACCESS_KEY: #Your Access Key
-  SECRET_KEY: #Your Secret Key
-  bucket-name: #Your Bucket Name   在创建OSS实例时,可以创建bucket
-  domain: #Your domain  访问照片的路径
-  prefix: #Your prefix  存储时的前缀
+  ACCESS_KEY: #
+  SECRET_KEY: #
+  bucket-name: #
+  domain: #
+  prefix: #
 
 

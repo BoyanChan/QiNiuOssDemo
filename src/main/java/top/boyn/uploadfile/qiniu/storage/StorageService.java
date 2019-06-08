@@ -9,5 +9,7 @@ public interface StorageService {
 
     void init() throws Exception;
 
-    void store(MultipartFile file);
+    String getToken();
+
+    boolean store(MultipartFile file);
 }
